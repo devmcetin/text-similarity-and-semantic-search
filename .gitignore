@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pkl
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Çözüm — repo'ya GİTMEZ (Kaizu DB'de saklanır, öğrenci görmemeli)
+_solution/
+
+# Çıktı / model dosyaları
+*.h5
+*.joblib
+saved_model/
+
+# Dataset — sklearn ile runtime'da ~/scikit_learn_data'ya iner, repo'ya gitmez
+data/
+scikit_learn_data/
