@@ -12,6 +12,12 @@ Her fonksiyonun pass kısmını doldur. Testleri çalıştır, hepsi geçene kad
 iterate et: `python watch.py` veya `pytest tests/test_question.py -v`
 """
 
+import numpy as np
+
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
 
 # 1. Korpusu çek — 20 Newsgroups
 def fetch_corpus(categories=None, limit=1000):
@@ -47,7 +53,28 @@ def fetch_corpus(categories=None, limit=1000):
     - docs = list(news.data[:limit])
     - labels = [int(t) for t in news.target[:limit]]
     """
-    pass
+    
+    if categories is None:
+        categories = [
+            "sci.space",
+            "rec.autos",
+            "sci.med",
+            "comp.graphics"
+        ]
+
+    news = fetch_20newsgroups(
+        subset="train",
+        categories=categories,
+        remove=("headers", "footers", "quotes"),
+        shuffle=True,
+        random_state=42
+    )
+
+    docs = list(news.data[:limit])
+    labels = [int(t) for t in news.target[:limit]]
+    target_names = list(news.target_names)
+
+    return docs, labels, target_names
 
 
 # 2. Korpusu keşfet
@@ -74,7 +101,16 @@ def explore_corpus(docs, labels, target_names):
     - docs_per_category: her idx için labels içinde kaç kez geçtiğini say
       (enumerate(target_names) + sum(1 for l in labels if l == idx))
     """
-    pass
+    
+    return {
+        "n_docs": len(docs),
+        "n_categories": len(target_names),
+        "avg_doc_length": np.mean([len(doc.split()) for doc in docs]),
+        "docs_per_category": {
+            category: sum(1 for label in labels if label == idx)
+            for idx, category in enumerate(target_names)
+        }
+    }
 
 
 # 3. TF-IDF doküman-terim matrisi kur
@@ -100,7 +136,11 @@ def build_tfidf_matrix(docs):
     - vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
     - tfidf_matrix = vectorizer.fit_transform(docs)
     """
-    pass
+    
+    vectorizer = TfidfVectorizer(stop_words="english", max_features=5000)
+    
+    tfidf_matrix = vectorizer.fit_transform(docs)
+    return vectorizer, tfidf_matrix
 
 
 # 4. Sorgu metnini TF-IDF vektörüne çevir
@@ -121,7 +161,8 @@ def query_to_vector(vectorizer, query):
     İpucu:
     - transform bir liste bekler → vectorizer.transform([query])
     """
-    pass
+    
+    return vectorizer.transform([query])
 
 
 # 5. Sorgu ile tüm dokümanların cosine benzerliği
@@ -142,7 +183,8 @@ def compute_similarities(query_vec, tfidf_matrix):
     - cosine_similarity(query_vec, tfidf_matrix) → 1×n_docs (2B)
     - .ravel() ile 1B array'e düzleştir
     """
-    pass
+    
+    return cosine_similarity(query_vec, tfidf_matrix).ravel()
 
 
 # 6. En benzer k doküman
@@ -166,7 +208,19 @@ def most_similar_docs(vectorizer, tfidf_matrix, query, k=5):
     - top_idx = np.argsort(sims)[::-1][:k]  # büyükten küçüğe ilk k indeks
     - [{'index': int(i), 'score': float(sims[i])} for i in top_idx]
     """
-    pass
+    
+    query_vec = query_to_vector(vectorizer, query)
+    sims = compute_similarities(query_vec, tfidf_matrix)
+
+    top_idx = np.argsort(sims)[::-1][:k]
+
+    return [
+        {
+            "index": int(i),
+            "score": float(sims[i])
+        }
+        for i in top_idx
+    ]
 
 
 # 7. İki doküman arası cosine benzerlik
@@ -185,7 +239,8 @@ def pairwise_similarity(tfidf_matrix, i, j):
     - cosine_similarity(tfidf_matrix[i], tfidf_matrix[j]) → 1×1 matris
     - float(... [0, 0]) ile skaler değeri al
     """
-    pass
+    
+    return float(cosine_similarity(tfidf_matrix[i], tfidf_matrix[j])[0, 0])
 
 
 # 8. Yakın-kopya (near-duplicate) çiftleri
@@ -209,7 +264,20 @@ def find_near_duplicates(tfidf_matrix, threshold=0.5):
     - İç içe döngü: for i in range(n): for j in range(i+1, n):
         score = float(sims[i, j]); if score >= threshold: pairs.append((i, j, score))
     """
-    pass
+    
+    sims = cosine_similarity(tfidf_matrix)
+    n = sims.shape[0]
+
+    pairs = []
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            score = float(sims[i, j])
+
+            if score >= threshold:
+                pairs.append((i, j, score))
+
+    return pairs
 
 
 # 9. En benzer doküman çifti
@@ -232,7 +300,15 @@ def most_similar_pair(tfidf_matrix):
     - i, j = np.unravel_index(np.argmax(sims), sims.shape)
     - i, j = int(i), int(j); i > j ise swap (i < j olsun)
     """
-    pass
+    sims = cosine_similarity(tfidf_matrix)
+    np.fill_diagonal(sims, -1.0)
+    i, j = np.unravel_index(np.argmax(sims), sims.shape)
+    i, j = int(i), int(j)
+
+    if i > j:
+        i, j = j, i
+
+    return i, j, float(sims[i, j])
 
 
 # 10. Kullanılabilir arama sonucu
@@ -255,7 +331,17 @@ def search(vectorizer, tfidf_matrix, docs, query, k=3):
     - hits = most_similar_docs(vectorizer, tfidf_matrix, query, k=k)
     - Her hit için preview = docs[hit['index']][:80]
     """
-    pass
+    
+    hits = most_similar_docs(vectorizer, tfidf_matrix, query, k=k)
+
+    return [
+        {
+            "index": hit["index"],
+            "score": hit["score"],
+            "preview": docs[hit["index"]][:80]
+        }
+        for hit in hits
+    ]
 
 
 # 11. Kategori tutarlılığı — intra vs inter benzerlik
@@ -283,7 +369,26 @@ def category_coherence(tfidf_matrix, labels):
         labels[i] == labels[j] ise intra'ya, değilse inter'e ekle
     - intra = np.mean(intra_vals), inter = np.mean(inter_vals)
     """
-    pass
+    
+    sims = cosine_similarity(tfidf_matrix)
+    labels = np.asarray(labels)
+
+    n = sims.shape[0]
+
+    intra_vals = []
+    inter_vals = []
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if labels[i] == labels[j]:
+                intra_vals.append(sims[i, j])
+            else:
+                inter_vals.append(sims[i, j])
+
+    return {
+        "intra": float(np.mean(intra_vals)),
+        "inter": float(np.mean(inter_vals))
+    }
 
 
 # 12. Uçtan uca pipeline
@@ -308,7 +413,42 @@ def run_pipeline():
             'most_similar_pair_score': float
         }
     """
-    pass
+    
+    # 1. fetch_corpus → (docs, labels, target_names)
+    docs, labels, target_names = fetch_corpus()
+    
+    # 2. build_tfidf_matrix → (vectorizer, tfidf_matrix)
+    vectorizer, tfidf_matrix = build_tfidf_matrix(docs)
+    
+    # 3. Uzay temalı sorgu ile arama yap, en benzer dokümanın kategorisini al:
+    #    query = "NASA rocket launch to Mars orbit"
+    #    most_similar_docs(..., k=1) → top_idx → target_names[labels[top_idx]]
+    #    (sci.space çıkmasını bekliyoruz)
+    query = "NASA rocket launch to Mars orbit"
+    
+    top_result = most_similar_docs(
+        vectorizer,
+        tfidf_matrix,
+        query,
+        k=1
+    )
+
+    top_idx = top_result[0]["index"]
+    top_category = target_names[labels[top_idx]]
+    
+    # 4. category_coherence → intra / inter benzerlik
+    coherence = category_coherence(tfidf_matrix, labels)
+    
+    # 5. most_similar_pair → en benzer çiftin skoru
+    _, _, pair_score = most_similar_pair(tfidf_matrix)
+    
+    return {
+        "n_docs": len(docs),
+        "top_result_for_space_query": top_category,
+        "intra_sim": coherence["intra"],
+        "inter_sim": coherence["inter"],
+        "most_similar_pair_score": pair_score,
+    }
 
 
 if __name__ == "__main__":
